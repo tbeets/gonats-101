@@ -17,13 +17,14 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/nats-io/nats.go"
 )
 
 func usage() {
-	log.Printf("Usage: nats-js-subdds [-s server] [-creds file] [-nkey file] [-tlscert file] [-tlskey file] [-tlscacert file] [-bs batchsize] <stream> <consumer>\n")
+	log.Printf("Usage: nats-js-subsds [-s server] [-creds file] [-nkey file] [-tlscert file] [-tlskey file] [-tlscacert file] [-t] <stream> <consumer>\n")
 	flag.PrintDefaults()
 }
 
@@ -47,8 +48,8 @@ func main() {
 	var tlsClientCert = flag.String("tlscert", "", "TLS client certificate file")
 	var tlsClientKey = flag.String("tlskey", "", "Private key file for client certificate")
 	var tlsCACert = flag.String("tlscacert", "", "CA certificate to verify peer against")
+	var showTime = flag.Bool("t", false, "Display timestamps")
 	var showHelp = flag.Bool("h", false, "Show help message")
-	var batchSize = flag.Int("bs", 1, "fetch batch size (default 1)")
 
 	log.SetFlags(0)
 	flag.Usage = usage
@@ -110,33 +111,44 @@ func main() {
 
 	str, con := args[0], args[1]
 
-	// Simple Pull Consumer
-	// Prefer the Bind subscription option to explicitly identify the JetStream and JS Consumer
-	// and fail if not found.
-	// Note: Redundantly, the durable parameter must be passed (JS Consumer name) even with Bind opt
-	sub, err := js.PullSubscribe("", con, nats.Bind(str, con), nats.ManualAck())
+	// Even though we are using Bind(), the method requires us to specify a queueGroup parameter that matches with the
+	// bound Push JS Consumer so we look that up.
 
-	msgs, err := sub.Fetch(
-		*batchSize,
-		nats.MaxWait(5*time.Second))
-
-	var atLeastOne bool
-	for i, msg := range msgs {
+	i := 0
+	_, err = js.QueueSubscribe("", getConsumerDeliverGroup(js, str, con), func(msg *nats.Msg) {
+		i += 1
 		printMsg(msg, i)
-		err = msg.Ack()
-		if err != nil {
-			log.Fatal(err)
-		}
-		atLeastOne = true
-	}
+	}, nats.Bind(str, con))
 
-	if err := nc.LastError(); err != nil {
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	if !atLeastOne {
-		log.Printf("no messages")
+	log.Printf("Listening on stream [%s], consumer [%s]", str, con)
+	if *showTime {
+		log.SetFlags(log.LstdFlags)
 	}
+
+	// Setup the interrupt handler to drain so we don't miss
+	// requests when scaling down.
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	<-c
+	log.Println()
+	log.Printf("Draining...")
+	nc.Drain()
+	log.Fatalf("Exiting")
+}
+
+func getConsumerDeliverGroup(js nats.JetStreamContext, str string, con string) string {
+	ci, err := js.ConsumerInfo(str, con)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if ci.Config.DeliverSubject == "" {
+		log.Fatalf("JS Consumer [%s] is not an SDS consumer", con)
+	}
+	return ci.Config.DeliverGroup
 }
 
 func setupConnOptions(opts []nats.Option) []nats.Option {
