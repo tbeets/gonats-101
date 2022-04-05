@@ -31,7 +31,7 @@ See [ngs-xacct-demo](https://github.com/ConnectEverything/ngs-xacct-demo)
 ###### nats-js-subsdds example
 ```bash
 # FULFILLEVENTS-C1 is a Pull JS Consumer
-nats-js-subdds -s "tls://connect.ngs.synadia-test.com" -creds "/home/todd/.nkeys/creds/test-syn/todd-test-a/test-ash.creds" FULFILLEVENTS FULFILLEVENTS-C1
+./nats-js-subdds -s "tls://connect.ngs.synadia-test.com" -creds "/home/todd/.nkeys/creds/test-syn/todd-test-a/test-ash.creds" FULFILLEVENTS FULFILLEVENTS-C1
 
 # FULFILLEVENTS stream subscribes to retail.v1.fulfill.>
 ./nats-js-pubasync -s "tls://connect.ngs.synadia-test.com" -creds "/home/todd/.nkeys/creds/test-syn/todd-test-a/test-ash.creds" "retail.v1.fulfill.completed" "Fulfill for order 1234 completed!"
