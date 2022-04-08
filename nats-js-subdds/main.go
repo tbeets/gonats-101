@@ -155,7 +155,7 @@ func setupConnOptions(opts []nats.Option) []nats.Option {
 	}))
 	opts = append(opts, nats.ClosedHandler(func(nc *nats.Conn) {
 		if nc.LastError() != nil {
-			log.Fatalf("Exiting: %v", nc.LastError())
+			log.Printf("ClosedHandler: %v", nc.LastError())
 		}
 	}))
 	return opts
